@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Navigation, Box, RefreshCw, Cpu, CheckCircle } from "lucide-react";
 
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = "/api";
 
 type LogType = { text: string; type: "normal" | "success" | "highlight" | "error" };
 
@@ -106,14 +106,17 @@ export default function CityFlowDashboard() {
       
       addLog("Random City Map Generated Successfully.", "success");
     } catch (err) {
-      addLog("API Error. Ensure C++ Server is running on port 8080.", "error");
+      addLog("API Error. Ensure the Next.js API routes are working.", "error");
     }
   };
 
   const handleKruskal = async () => {
     addLog("[ALGORITHM] Building Infrastructure (Kruskal's MST)...", "highlight");
     try {
-      const res = await fetch(`${API_BASE}/kruskal`);
+      const res = await fetch(`${API_BASE}/kruskal`, {
+        method: "POST",
+        body: JSON.stringify({ edges: edgesDataSet.current.get(), hubs })
+      });
       const data = await res.json();
 
       let currentEdges = edgesDataSet.current.get();
@@ -139,7 +142,15 @@ export default function CityFlowDashboard() {
   const handleDijkstra = async () => {
     addLog(`[ALGORITHM] GPS Navigation (Dijkstra) | Hub ${startHub} -> Hub ${endHub}`, "highlight");
     try {
-      const res = await fetch(`${API_BASE}/dijkstra?start=${startHub}&end=${endHub}`);
+      const res = await fetch(`${API_BASE}/dijkstra`, {
+        method: "POST",
+        body: JSON.stringify({ 
+          nodes: nodesDataSet.current.get(), 
+          edges: edgesDataSet.current.get(), 
+          start: startHub, 
+          end: endHub 
+        })
+      });
       const data = await res.json();
 
       if (data.status === "error") {
@@ -174,7 +185,10 @@ export default function CityFlowDashboard() {
   const handleKnapsack = async () => {
     addLog(`[ALGORITHM] Load Optimizer (0/1 Knapsack) | Van Limit: ${knapsackLimit}KG`, "highlight");
     try {
-      const res = await fetch(`${API_BASE}/knapsack?limit=${knapsackLimit}`);
+      const res = await fetch(`${API_BASE}/knapsack`, {
+        method: "POST",
+        body: JSON.stringify({ limit: knapsackLimit })
+      });
       const data = await res.json();
 
       if (data.status === "error") {
