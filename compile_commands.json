@@ -1,0 +1,22 @@
+[
+  {
+    "directory": "/Users/ishandhole/Downloads/course/DAA/project1",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/Architect.cpp -o Architect.o",
+    "file": "src/Architect.cpp"
+  },
+  {
+    "directory": "/Users/ishandhole/Downloads/course/DAA/project1",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/Archivist.cpp -o Archivist.o",
+    "file": "src/Archivist.cpp"
+  },
+  {
+    "directory": "/Users/ishandhole/Downloads/course/DAA/project1",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/Governor.cpp -o Governor.o",
+    "file": "src/Governor.cpp"
+  },
+  {
+    "directory": "/Users/ishandhole/Downloads/course/DAA/project1",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/CityFlow_Main.cpp -o CityFlow_Main.o",
+    "file": "src/CityFlow_Main.cpp"
+  }
+]
