@@ -6,165 +6,163 @@
 #include <memory>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 
 using namespace std;
 using json = nlohmann::json;
 
-// Global Graph State
+// ----------------------------------------------------------------------------------
+// GLOBAL STATE: The single source of truth for the City infrastructure.
+// ----------------------------------------------------------------------------------
 unique_ptr<CityGraph> activeGraph = nullptr;
 
-// ----------------------------------------------------------------------------------
-// ROUTING DEFINITIONS (The "Bridge" between Algorithms and the UI)
-// ----------------------------------------------------------------------------------
+/**
+ * [ROUTING HUB]
+ * This function defines the "Bridge" between the C++ Engine and the Web UI.
+ * It maps URL endpoints to the specific DAA Algorithms.
+ */
 void setupRoutes(httplib::Server& svr) {
     
-    // [ENDPOINT] Generate Map: Creates the "Problem Input" for the algorithms to solve.
+    // [UI TRIGGER] Generate Map
     svr.Get("/api/generateMap", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
-        
-        int hubs = 8;
-        if (req.has_param("hubs")) hubs = stoi(req.get_param_value("hubs"));
-        if (hubs < 2 || hubs > 50) hubs = 8; // Safety bounds
-        
-        // Initialize a new Graph structure in memory
+        int hubs = (req.has_param("hubs")) ? stoi(req.get_param_value("hubs")) : 8;
         activeGraph = make_unique<CityGraph>(hubs);
-        // Step 1: Use Random Edge Generation to simulate unpaved terrain
         activeGraph->generateRandomEdges(hubs * 2); 
-        
-        // Step 2: Return JSON so the UI knows where the hubs are
-        json result = activeGraph->getGraphData();
-        res.set_content(result.dump(), "application/json");
+        res.set_content(activeGraph->getGraphData().dump(), "application/json");
     });
 
-    // [ALGORITHM 1] Kruskal's MST (Paradigm: GREEDY)
-    // Complexity: O(E log E) - Sorting the edges dominates the time.
-    // Use Case: Paving roads with the absolute minimum budget while avoiding wasteful cycles.
+    // [ALGORITHM 1 TRIGGER] Kruskal's MST
     svr.Get("/api/kruskal", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
-        
         if (!activeGraph) {
-            res.set_content(json{{"status", "error"}, {"message", "Map not generated"}}.dump(), "application/json");
+            json err;
+            err["status"] = "error";
+            err["message"] = "Graph not initialized. Generate a map first.";
+            res.set_content(err.dump(), "application/json");
             return;
         }
-        // Calls the architectural logic to solve the Minimum Spanning Tree
-        json result = activeGraph->runKruskal();
-        res.set_content(result.dump(), "application/json");
+        res.set_content(activeGraph->runKruskal().dump(), "application/json");
     });
 
-    // [ALGORITHM 2] Dijkstra's Shortest Path (Paradigm: GREEDY)
-    // Complexity: O(E log V) using a Priority Queue (Min-Heap).
-    // Use Case: Finding the fastest direct delivery route for one truck.
+    // [ALGORITHM 2 TRIGGER] Dijkstra's Shortest Path
     svr.Get("/api/dijkstra", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
-        
         if (!activeGraph) {
-            res.set_content(json{{"status", "error"}, {"message", "Map not generated"}}.dump(), "application/json");
+            json err;
+            err["status"] = "error";
+            err["message"] = "Graph not initialized.";
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
+        
+        if (!req.has_param("start") || !req.has_param("end")) {
+            json err;
+            err["status"] = "error";
+            err["message"] = "Missing start or end hub ID.";
+            res.set_content(err.dump(), "application/json");
             return;
         }
 
-        int start = 0;
-        int end = 4;
-        if (req.has_param("start")) start = stoi(req.get_param_value("start"));
-        if (req.has_param("end")) end = stoi(req.get_param_value("end"));
-
-        json result = activeGraph->runDijkstra(start, end);
-        res.set_content(result.dump(), "application/json");
+        try {
+            int start = stoi(req.get_param_value("start"));
+            int end = stoi(req.get_param_value("end"));
+            res.set_content(activeGraph->runDijkstra(start, end).dump(), "application/json");
+        } catch (...) {
+            json err;
+            err["status"] = "error";
+            err["message"] = "Invalid Hub ID (numeric value required).";
+            res.set_content(err.dump(), "application/json");
+        }
     });
 
-    // [ALGORITHM 3] 0/1 Knapsack (Paradigm: DYNAMIC PROGRAMMING)
-    // Complexity: O(N * W) where N is items and W is capacity.
-    // Use Case: Filling a delivery van with the most valuable packages without exceeding weight limits.
+    // ------------------------------------------------------------------------------
+    // [ALGORITHM 3] 0/1 KNAPSACK (Logistics Optimizer)
+    // PARADIGM: DYNAMIC PROGRAMMING (DP)
+    // Goal: Fill a delivery van with fixed capacity to maximize profit.
+    // ------------------------------------------------------------------------------
     svr.Get("/api/knapsack", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         
         int weightLimit = 20;
-        if (req.has_param("limit")) weightLimit = stoi(req.get_param_value("limit"));
+        if (req.has_param("limit")) {
+            try {
+                weightLimit = stoi(req.get_param_value("limit"));
+            } catch (...) {
+                weightLimit = 20;
+            }
+        }
 
-        // Step 1: Input Data - Packages with Weight vs Value (Profit)
-        struct Package { string id; int weight; int value; };
-        vector<Package> packages = {
-            {"Medical Supplies", 5, 50},
-            {"Electronics", 8, 80},
-            {"Office Chairs", 12, 60},
-            {"Luxury Goods", 3, 100},
-            {"Food Rations", 7, 40}
+        // DATA STRUCTURE 5: Hash Map for inventory lookups
+        unordered_map<string, pair<int, int>> catalog = {
+            {"Medical Supplies", {5, 50}}, {"Electronics", {8, 80}},
+            {"Office Chairs", {12, 60}}, {"Luxury Goods", {3, 100}}, {"Food Rations", {7, 40}}
         };
 
-        int n = packages.size();
-        // Data Structure: 2D Matrix for "Memoization" (The core of DP)
+        struct Item { string name; int w; int v; };
+        vector<Item> items;
+        for (auto const& [name, stats] : catalog) items.push_back({name, stats.first, stats.second});
+
+        int n = items.size();
+        
+        // DATA STRUCTURE 4: 2D Matrix for Memoization
+        // Represents the maximum value for 'i' items with capacity 'w'.
         vector<vector<int>> dp(n + 1, vector<int>(weightLimit + 1, 0));
 
-        // Step 2: Build the DP Table (Bottom-Up Approach)
+        // FORMULA: DP STATE TRANSITION
+        // For each item, decide:
+        // 1. Exclude: value = dp[i-1][w]
+        // 2. Include: value = item.v + dp[i-1][w - item.w] (if space allows)
+        // Result: dp[i][w] = max(exclude, include)
         for (int i = 1; i <= n; i++) {
             for (int w = 1; w <= weightLimit; w++) {
-                // If package fits, decide: include it or leave it?
-                if (packages[i - 1].weight <= w) {
-                    // Logic: max( Don't Include , Include and take remaining weight solution )
-                    dp[i][w] = max(dp[i - 1][w], packages[i - 1].value + dp[i - 1][w - packages[i - 1].weight]);
+                if (items[i-1].w <= w) {
+                    dp[i][w] = max(dp[i-1][w], items[i-1].v + dp[i-1][w - items[i-1].w]);
                 } else {
-                    // Package too heavy; must copy the previous best for this weight
-                    dp[i][w] = dp[i - 1][w];
+                    dp[i][w] = dp[i-1][w];
                 }
             }
         }
 
-        // Step 3: Traceback - Read the DP table backwards to find which packages were chosen
-        int maxProfit = dp[n][weightLimit];
+        // BACKTRACKING: Recovering the actual items that make up the "Max Revenue"
+        // by looking at which decisions increased the value in the DP table.
+        json loaded = json::array();
         int w = weightLimit;
-        json selectedPackages = json::array();
-
-        for (int i = n; i > 0 && maxProfit > 0; i--) {
-            // If value changed, it means the current package was definitely included
-            if (maxProfit != dp[i - 1][w]) { 
-                selectedPackages.push_back({
-                    {"name", packages[i - 1].id},
-                    {"weight", packages[i - 1].weight},
-                    {"value", packages[i - 1].value}
-                });
-                maxProfit -= packages[i - 1].value;
-                w -= packages[i - 1].weight;
+        int maxVal = dp[n][weightLimit];
+        for (int i = n; i > 0 && maxVal > 0; i--) {
+            if (maxVal != dp[i-1][w]) {
+                loaded.push_back({{"name", items[i-1].name}, {"weight", items[i-1].w}, {"value", items[i-1].v}});
+                maxVal -= items[i-1].v;
+                w -= items[i-1].w;
             }
         }
 
-        json allPackages = json::array();
-        for (const auto& p : packages) {
-            allPackages.push_back({{"name", p.id}, {"weight", p.weight}, {"value", p.value}});
-        }
-
-        // Complete the table and traceback logic as before...
-        // ... but also return the 2D matrix for the professor's visual benefit!
-        
-        json result;
-        result["status"] = "success";
-        result["inventory"] = allPackages;
-        result["matrix"] = dp; // nlohmann/json automatically handles 2D vector<vector<int>> !
-        result["maxRevenue"] = dp[n][weightLimit];
-        result["loaded"] = selectedPackages;
-        res.set_content(result.dump(), "application/json");
+        json resObj;
+        resObj["status"] = "success";
+        resObj["matrix"] = dp;
+        resObj["maxRevenue"] = dp[n][weightLimit];
+        resObj["loaded"] = loaded;
+        resObj["inventory"] = json::array();
+        for (const auto& it : items) resObj["inventory"].push_back({{"name", it.name}, {"weight", it.w}, {"value", it.v}});
+        res.set_content(resObj.dump(), "application/json");
     });
 }
 
+/**
+ * [ENTRY POINT]
+ * Starts the Logistics Engine and serves the API on Port 8080.
+ */
 int main() {
-    // Generate initial default graph so UI doesn't break on startup
-    activeGraph = make_unique<CityGraph>(8);
-    activeGraph->generateRandomEdges(16);
-
     httplib::Server svr;
-
-    // Headless API Mode: We no longer serve static files, heavily empowering the decoupled Next.js stack!
-    svr.Options(R"(.*)", [](const httplib::Request& req, httplib::Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    });
-
+    
+    // ANSI Startup Banner for professional presentation
+    cout << "\033[1;36m" << "==================================================" << endl;
+    cout << "        CITYFLOW 2.0: LOGISTICS ENGINE         " << endl;
+    cout << "==================================================" << "\033[0m" << endl;
+    cout << "Architecture: C++ Core -> JSON API -> Next.js UI" << endl;
+    cout << "Listening on: http://localhost:8080" << endl;
 
     setupRoutes(svr);
-
-    cout << "Starting CityFlow Server on http://localhost:8080..." << endl;
-    
-    // Listen on port 8080
     svr.listen("0.0.0.0", 8080);
-    
     return 0;
 }

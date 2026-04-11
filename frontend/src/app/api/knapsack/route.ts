@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
-  const body = await request.json();
-  const { limit: weightLimit } = body;
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const weightLimit = parseInt(searchParams.get("limit") || "20");
 
   const packages = [
     { name: "Medical Supplies", weight: 5, value: 50 },
