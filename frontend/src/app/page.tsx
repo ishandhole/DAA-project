@@ -3,10 +3,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Navigation, Box, RefreshCw, Cpu, CheckCircle } from "lucide-react";
 
-// API_BASE: The bridge to our C++ Algorithmic Engine (running on Port 8080)
-const API_BASE = "http://localhost:8080/api";
+// API_BASE: Points to our internal Next.js API Routes (Serverless)
+const API_BASE = "/api";
 
 type LogType = { text: string; type: "normal" | "success" | "highlight" | "error" };
+
+const PACKAGES = [
+  { name: "Medical Supplies", weight: 5, value: 50 },
+  { name: "Electronics", weight: 8, value: 80 },
+  { name: "Office Chairs", weight: 12, value: 60 },
+  { name: "Luxury Goods", weight: 3, value: 100 },
+  { name: "Food Rations", weight: 7, value: 40 },
+];
 
 /**
  * [COMPONENT] CityFlowDashboard
@@ -212,7 +220,19 @@ export default function CityFlowDashboard() {
             </div>
           ) : (
             <div className="flex-grow overflow-auto p-2">
-              <h3 className="text-sky-400 font-bold mb-3 uppercase tracking-widest">DP Matrix (Memoization Table)</h3>
+              <h3 className="text-sky-400 font-bold mb-3 uppercase tracking-widest text-xs">Material Inventory (Problem Inputs)</h3>
+              
+              {/* Material Inventory Header: Always visible for the professor to see the input data */}
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                {PACKAGES.map((item, i) => (
+                  <div key={i} className="bg-slate-800/50 p-2 border border-slate-700 rounded shadow-sm">
+                    <div className="font-bold text-sky-300 truncate text-[10px]">{item.name}</div>
+                    <div className="text-slate-500 text-[10px]">{item.weight}kg | ${item.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="text-sky-400 font-bold mb-3 uppercase tracking-widest text-xs">DP Matrix (Memoization Table)</h3>
               <table className="w-full border-collapse text-[10px] text-slate-400">
                 <thead>
                   <tr className="bg-slate-800">
