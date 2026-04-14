@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const start = parseInt(searchParams.get("start") || "0");
-  const end = parseInt(searchParams.get("end") || "1");
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { nodes, edges, start, end } = body;
+  const numNodes = nodes?.length || 0;
 
-  // Fallback map generation for the stateless GET handler
-  const hubsCount = 12; 
-  const nodes = Array.from({ length: hubsCount }, (_, i) => ({ id: i }));
-  const edges: any[] = [];
-  for (let i = 0; i < hubsCount - 1; i++) {
-    edges.push({ from: i, to: i + 1, weight: 1 });
+  if (numNodes === 0) {
+    return NextResponse.json({ status: "error", message: "No nodes in graph." });
   }
 
-  const numNodes = nodes.length;
+  // Map Hub IDs to 0-based internal indices
   const idToIndex = new Map<number, number>();
   nodes.forEach((node: any, index: number) => {
     idToIndex.set(Number(node.id), index);
@@ -33,11 +29,14 @@ export async function GET(request: Request) {
   const parent = new Array(numNodes).fill(-1);
   const visited = new Array(numNodes).fill(false);
 
+  // Adjacency List for Dijkstra
   const adjList: any[][] = Array.from({ length: numNodes }, () => []);
   for (const edge of edges) {
     const uIdx = idToIndex.get(Number(edge.from));
     const vIdx = idToIndex.get(Number(edge.to));
+    
     if (uIdx !== undefined && vIdx !== undefined) {
+      // It's an undirected graph according to the logic
       adjList[uIdx].push({ to: vIdx, weight: Number(edge.weight) });
       adjList[vIdx].push({ to: uIdx, weight: Number(edge.weight) });
     }
@@ -63,12 +62,15 @@ export async function GET(request: Request) {
       if (dist[uIdx] + weight < dist[vIdx]) {
         dist[vIdx] = dist[uIdx] + weight;
         parent[vIdx] = uIdx;
-        }
+      }
     }
   }
 
   if (dist[endIndex] === Infinity) {
-    return NextResponse.json({ status: "error", message: "No path found in fallback map." });
+    return NextResponse.json({
+      status: "error",
+      message: "No connected path between these hubs.",
+    });
   }
 
   const pathIndices = [];
@@ -77,6 +79,7 @@ export async function GET(request: Request) {
   }
   pathIndices.reverse();
 
+  // Convert indices back to original IDs
   const indexToId = nodes.map((n: any) => n.id);
   const path = pathIndices.map(idx => indexToId[idx]);
 

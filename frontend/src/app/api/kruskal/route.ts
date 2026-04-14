@@ -30,42 +30,51 @@ class DSU {
   }
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const hubs = parseInt(searchParams.get("hubs") || "8");
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { edges, nodes } = body;
 
-  // Fallback names to match Architect.cpp logic
-  const possibleNames = [
-    "Central Warehouse", "Silicon Valley Depot", "Marina Harbor", 
-    "Echo Ridge Station", "Sunset Terminal", "Tech Plaza", 
-    "Green Valley Hub", "Skyline Port", "Blue Creek Logistics", 
-    "Grand Avenue Depot", "South Gate", "North Point"
-  ];
+  const getHubName = (id: number) => {
+    const node = nodes?.find((n: any) => n.id === id);
+    return node ? node.label : `Hub ${id}`;
+  };
 
-  const getHubName = (id: number) => (id < possibleNames.length ? possibleNames[id] : `Generic Hub ${id}`);
+  // Extract unique node IDs from edges to map them safely to 0..N-1
+  const allNodeIds = new Set<number>();
+  edges.forEach((e: any) => {
+    allNodeIds.add(Number(e.from));
+    allNodeIds.add(Number(e.to));
+  });
 
-  // For a stateless GET request in the fallback, we generate a stable-ish MST
-  // based on the hubs count if no edges were passed. 
-  // Normally, the UI should provide edges, but for a GET-aligned signature:
-  const mstEdges = [];
+  const idToIndex = new Map<number, number>();
+  Array.from(allNodeIds).forEach((id, index) => {
+    idToIndex.set(id, index);
+  });
+
+  if (allNodeIds.size === 0) {
+     return NextResponse.json({ status: "success", totalCost: 0, edges: [] });
+  }
+
+  const sortedEdges = [...edges].sort((a, b) => Number(a.weight) - Number(b.weight));
+  const dsu = new DSU(allNodeIds.size);
   let totalCost = 0;
-  const dsu = new DSU(hubs);
+  const mstEdges = [];
 
-  // Simple deterministic generation for the fallback MST
-  for (let i = 1; i < hubs; i++) {
-    const u = i;
-    const v = Math.floor(i / 2); // Deterministic "parent"
-    const weight = (i % 10) + 1;
-    
-    dsu.unite(u, v);
-    totalCost += weight;
-    mstEdges.push({
-      src: u,
-      dest: v,
-      weight: weight,
-      srcName: getHubName(u),
-      destName: getHubName(v)
-    });
+  for (const edge of sortedEdges) {
+    const uIdx = idToIndex.get(Number(edge.from))!;
+    const vIdx = idToIndex.get(Number(edge.to))!;
+
+    if (dsu.find(uIdx) !== dsu.find(vIdx)) {
+      dsu.unite(uIdx, vIdx);
+      totalCost += Number(edge.weight);
+      mstEdges.push({
+        src: edge.from,
+        dest: edge.to,
+        weight: Number(edge.weight),
+        srcName: getHubName(edge.from),
+        destName: getHubName(edge.to)
+      });
+    }
   }
 
   return NextResponse.json({

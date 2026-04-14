@@ -104,7 +104,10 @@ export default function CityFlowDashboard() {
   const handleKruskal = async () => {
     addLog("[ALGORITHM] Triggering Kruskal's MST (Greedy Paradigm)...", "highlight");
     try {
-      const res = await fetch(`${API_BASE}/kruskal`);
+      const res = await fetch(`${API_BASE}/kruskal`, {
+        method: "POST",
+        body: JSON.stringify({ edges: edgesDataSet.current.get(), nodes: nodesDataSet.current.get() })
+      });
       const data = await res.json();
       addLog(`Calculation Complete. Minimum Road Cost: $${data.totalCost} Mil`, "success");
       
@@ -128,7 +131,15 @@ export default function CityFlowDashboard() {
   const handleDijkstra = async () => {
     addLog(`[ALGORITHM] Triggering Dijkstra's GPS (Greedy + Heap)...`, "highlight");
     try {
-      const res = await fetch(`${API_BASE}/dijkstra?start=${startHub}&end=${endHub}`);
+      const res = await fetch(`${API_BASE}/dijkstra`, {
+        method: "POST",
+        body: JSON.stringify({ 
+          nodes: nodesDataSet.current.get(), 
+          edges: edgesDataSet.current.get(), 
+          start: startHub, 
+          end: endHub 
+        })
+      });
       const data = await res.json();
       addLog(`Fastest Route Distance Found: ${data.cost} KM`, "success");
       
